@@ -22,8 +22,9 @@ dropout = .2
 
 num_epochs = 100
 steps_per_epoch = 100
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 learning_rate = 1e-4
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print("Using Device: ", device)
 
 def get_xy(ds, bsz = batch_size):
     if ds == "train":
