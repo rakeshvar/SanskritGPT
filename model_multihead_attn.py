@@ -135,3 +135,46 @@ class OneLayerGPT(nn.Module):
             context = torch.cat((context, preds), dim=-1)
 
         return context
+
+
+class GPT(nn.Module):
+    def __init__(self, vocab_size, context_size, n_embed, num_heads, n_hidden, dropout, nattnblocks):
+        super().__init__()
+        self.embedding = EmbeddingLayer(vocab_size, context_size, n_embed, dropout)
+        self.attnblocks = nn.ModuleList(
+            [AttentionBlock(n_embed, num_heads, n_hidden, dropout) for _ in range(nattnblocks)])
+        self.layernorm = LayerNorm(n_embed)
+        self.unembedding = nn.Linear(n_embed, vocab_size)
+
+        self.context_size = context_size
+
+    def forward(self, context, targets=None):
+        dpu = context.device
+        emb = self.embedding(context)
+        for attn_block in self.attnblocks:
+            out = attn_block(emb)
+        out = self.layernorm(out)
+
+        if targets is not None:
+            logits = self.unembedding(out)
+            loss = F.cross_entropy(flat(logits), flat(targets))
+        else:
+            # Generate mode, so look at only the last time-step
+            logits = self.unembedding(out[:, [-1], :])
+            loss = None
+
+        return logits, loss
+
+    def generate(self, context, num_tokens):                       # B=1, T=1
+        for _ in range(num_tokens):
+            if context.shape[-1] > self.context_size:
+                this_context = context[:, -self.context_size:]     # B=1, <=T, C
+            else:
+                this_context = context
+            logits, _ = self(this_context)                         # B=1, 1, C
+            logits = logits[:, -1, :]                              # B=1, C
+            probs = F.softmax(logits, dim=-1)
+            preds = torch.multinomial(probs, 1)        # B=1, C=1
+            context = torch.cat((context, preds), dim=-1)
+
+        return context
