@@ -138,15 +138,16 @@ class OneLayerGPT(nn.Module):
 
 
 class GPT(nn.Module):
-    def __init__(self, vocab_size, context_size, n_embed, num_heads, n_hidden, dropout, nattnblocks):
+    def __init__(self, c):
+        # c (config) should have vocab_size, context_size, n_embed, num_heads, n_hidden, dropout, num_blocks
         super().__init__()
-        self.embedding = EmbeddingLayer(vocab_size, context_size, n_embed, dropout)
+        self.embedding = EmbeddingLayer(c.vocab_size, c.context_size, c.n_embed, c.dropout)
         self.attnblocks = nn.ModuleList(
-            [AttentionBlock(n_embed, num_heads, n_hidden, dropout) for _ in range(nattnblocks)])
-        self.layernorm = LayerNorm(n_embed)
-        self.unembedding = nn.Linear(n_embed, vocab_size)
+            [AttentionBlock(c.n_embed, c.num_heads, c.n_hidden, c.dropout) for _ in range(c.num_blocks)])
+        self.layernorm = LayerNorm(c.n_embed)
+        self.unembedding = nn.Linear(c.n_embed, c.vocab_size)
 
-        self.context_size = context_size
+        self.config = c
 
     def forward(self, context, targets=None):
         dpu = context.device
@@ -166,9 +167,10 @@ class GPT(nn.Module):
         return logits, loss
 
     def generate(self, context, num_tokens):                       # B=1, T=1
+        context_size = self.config.context_size
         for _ in range(num_tokens):
-            if context.shape[-1] > self.context_size:
-                this_context = context[:, -self.context_size:]     # B=1, <=T, C
+            if context.shape[-1] > context_size:
+                this_context = context[:, -context_size:]     # B=1, <=T, C
             else:
                 this_context = context
             logits, _ = self(this_context)                         # B=1, 1, C
